@@ -15,6 +15,7 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HealingRouteImport } from './routes/healing'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AlertsRouteImport } from './routes/alerts'
 import { Route as AddApiRouteImport } from './routes/add-api'
 import { Route as IndexRouteImport } from './routes/index'
@@ -49,6 +50,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AlertsRoute = AlertsRouteImport.update({
   id: '/alerts',
   path: '/alerts',
@@ -69,6 +75,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/add-api': typeof AddApiRoute
   '/alerts': typeof AlertsRoute
+  '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/healing': typeof HealingRoute
   '/login': typeof LoginRoute
@@ -80,6 +87,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/add-api': typeof AddApiRoute
   '/alerts': typeof AlertsRoute
+  '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/healing': typeof HealingRoute
   '/login': typeof LoginRoute
@@ -92,6 +100,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/add-api': typeof AddApiRoute
   '/alerts': typeof AlertsRoute
+  '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/healing': typeof HealingRoute
   '/login': typeof LoginRoute
@@ -105,6 +114,7 @@ export interface FileRouteTypes {
     | '/'
     | '/add-api'
     | '/alerts'
+    | '/dashboard'
     | '/forgot-password'
     | '/healing'
     | '/login'
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/'
     | '/add-api'
     | '/alerts'
+    | '/dashboard'
     | '/forgot-password'
     | '/healing'
     | '/login'
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/'
     | '/add-api'
     | '/alerts'
+    | '/dashboard'
     | '/forgot-password'
     | '/healing'
     | '/login'
@@ -139,6 +151,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AddApiRoute: typeof AddApiRoute
   AlertsRoute: typeof AlertsRoute
+  DashboardRoute: typeof DashboardRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   HealingRoute: typeof HealingRoute
   LoginRoute: typeof LoginRoute
@@ -191,6 +204,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/alerts': {
       id: '/alerts'
       path: '/alerts'
@@ -219,6 +239,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AddApiRoute: AddApiRoute,
   AlertsRoute: AlertsRoute,
+  DashboardRoute: DashboardRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   HealingRoute: HealingRoute,
   LoginRoute: LoginRoute,
@@ -229,13 +250,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
