@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const nav = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/add-api", label: "Add API", icon: PlusCircle },
   { to: "/alerts", label: "Alerts & Incidents", icon: AlertTriangle },
   { to: "/healing", label: "AI Healing", icon: Sparkles },
@@ -24,7 +24,7 @@ export function AppSidebar() {
 
   return (
     <aside className="hidden lg:flex w-64 shrink-0 flex-col gap-2 border-r border-border bg-sidebar/60 backdrop-blur-xl p-4 sticky top-0 h-screen">
-      <Link to="/" className="flex items-center gap-2.5 px-2 py-3">
+      <Link to="/dashboard" className="flex items-center gap-2.5 px-2 py-3">
         <div className="relative">
           <div className="h-9 w-9 rounded-xl gradient-primary grid place-items-center glow-primary">
             <Activity className="h-5 w-5 text-white" />
