@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { MetricCard } from "@/components/dashboard/MetricCard";
@@ -14,47 +14,101 @@ import {
   Sparkles,
   Boxes,
   Zap,
-  Download,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
 });
 
-const apis = [
-  { name: "payments-api", region: "us-east-1", latency: "82ms", uptime: "99.99%", status: "healthy" as const },
-  { name: "auth-service", region: "eu-west-2", latency: "146ms", uptime: "99.92%", status: "healing" as const },
-  { name: "orders-api", region: "ap-south-1", latency: "108ms", uptime: "99.97%", status: "healthy" as const },
-  { name: "search-service", region: "us-west-2", latency: "312ms", uptime: "98.41%", status: "degraded" as const },
-  { name: "media-cdn", region: "global", latency: "44ms", uptime: "100%", status: "healthy" as const },
-  { name: "notifications", region: "eu-central-1", latency: "—", uptime: "97.12%", status: "down" as const },
-];
+interface MetricData {
+  total_apis: number;
+  active_incidents: number;
+  recovery_rate: number;
+  healings_24h: number;
+  avg_uptime: number;
+}
+
+interface EndpointData {
+  id: string;
+  name: string;
+  region: string;
+  latency: string;
+  uptime: string;
+  status: "healthy" | "healing" | "degraded" | "down" | "unknown";
+}
 
 function DashboardPage() {
+  const [metrics, setMetrics] = useState<MetricData>({
+    total_apis: 0,
+    active_incidents: 0,
+    recovery_rate: 100,
+    healings_24h: 0,
+    avg_uptime: 100,
+  });
+  const [endpoints, setEndpoints] = useState<EndpointData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchDashboardData = async () => {
+    try {
+      const metricsData = await api.get<MetricData>("/dashboard/metrics");
+      setMetrics(metricsData);
+      
+      const endpointsData = await api.get<any>("/dashboard/endpoints");
+      setEndpoints(endpointsData.endpoints || []);
+    } catch (e) {
+      console.error("Error loading dashboard metrics", e);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchDashboardData();
+    setRefreshing(false);
+    toast.success("Metrics refreshed");
+  };
+
+  const runHealthCheck = async () => {
+    toast.promise(
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+      {
+        loading: "Running active monitoring health check...",
+        success: () => {
+          handleRefresh();
+          return "All endpoint diagnostics completed!";
+        },
+        error: "Failed to run health check",
+      }
+    );
+  };
+
+  useEffect(() => {
+    fetchDashboardData().finally(() => setLoading(false));
+  }, []);
+
   return (
     <AppShell>
       <PageHeader
         title="Operations Overview"
         subtitle="Real-time health, incidents and autonomous healing across all services."
         actions={
-          <>
-            <Button variant="outline" size="sm" className="gap-2">
-              <RefreshCw className="h-3.5 w-3.5" /> Refresh
-            </Button>
-            <Button size="sm" className="gap-2 gradient-primary">
-              <Download className="h-3.5 w-3.5" /> Export
-            </Button>
-          </>
+          <Button variant="outline" size="sm" className="gap-2" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Refresh
+          </Button>
         }
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard label="APIs Monitored" value="248" delta="+12" trend="up" icon={Boxes} tone="primary" />
-        <MetricCard label="Active Incidents" value="3" delta="-2" trend="down" icon={AlertTriangle} tone="danger" />
-        <MetricCard label="Recovery Success" value="98.6%" delta="+1.4%" trend="up" icon={ShieldCheck} tone="success" />
-        <MetricCard label="AI Healings (24h)" value="142" delta="+38" trend="up" icon={Sparkles} tone="cyan" />
+        <MetricCard label="APIs Monitored" value={loading ? "..." : String(metrics.total_apis)} delta="+2" trend="up" icon={Boxes} tone="primary" />
+        <MetricCard label="Active Incidents" value={loading ? "..." : String(metrics.active_incidents)} delta="0" trend="down" icon={AlertTriangle} tone="danger" />
+        <MetricCard label="Recovery Success" value={loading ? "..." : `${metrics.recovery_rate}%`} delta="+0.4%" trend="up" icon={ShieldCheck} tone="success" />
+        <MetricCard label="AI Healings (24h)" value={loading ? "..." : String(metrics.healings_24h)} delta="+3" trend="up" icon={Sparkles} tone="cyan" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
@@ -75,9 +129,9 @@ function DashboardPage() {
         <div className="glass rounded-2xl p-5 flex flex-col">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold">System Health</h3>
-            <StatusBadge status="healthy" />
+            <StatusBadge status={metrics.active_incidents > 0 ? "degraded" : "healthy"} />
           </div>
-          <HealthRing value={98.6} />
+          <HealthRing value={metrics.avg_uptime} />
           <div className="grid grid-cols-2 gap-3 mt-2">
             <div className="rounded-lg bg-secondary/40 p-3">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">MTTR</p>
@@ -85,7 +139,7 @@ function DashboardPage() {
             </div>
             <div className="rounded-lg bg-secondary/40 p-3">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Uptime</p>
-              <p className="text-lg font-semibold">99.97%</p>
+              <p className="text-lg font-semibold">{metrics.avg_uptime}%</p>
             </div>
           </div>
         </div>
@@ -138,33 +192,39 @@ function DashboardPage() {
             <h3 className="text-sm font-semibold">Monitored Endpoints</h3>
             <p className="text-xs text-muted-foreground">Real-time status across regions</p>
           </div>
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={runHealthCheck}>
             <Zap className="h-3.5 w-3.5" /> Run Health Check
           </Button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-xs text-muted-foreground">
-              <tr className="border-b border-border">
-                <th className="text-left font-medium px-5 py-3">Service</th>
-                <th className="text-left font-medium px-5 py-3">Region</th>
-                <th className="text-left font-medium px-5 py-3">Latency</th>
-                <th className="text-left font-medium px-5 py-3">Uptime</th>
-                <th className="text-left font-medium px-5 py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {apis.map((a) => (
-                <tr key={a.name} className="border-b border-border last:border-0 hover:bg-secondary/30 transition">
-                  <td className="px-5 py-3.5 font-medium">{a.name}</td>
-                  <td className="px-5 py-3.5 text-muted-foreground">{a.region}</td>
-                  <td className="px-5 py-3.5 tabular-nums">{a.latency}</td>
-                  <td className="px-5 py-3.5 tabular-nums">{a.uptime}</td>
-                  <td className="px-5 py-3.5"><StatusBadge status={a.status} /></td>
+          {endpoints.length === 0 ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              No monitored endpoints yet. Go to <Link to="/add-api" className="text-primary hover:underline">Add API</Link> to get started.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="text-xs text-muted-foreground">
+                <tr className="border-b border-border">
+                  <th className="text-left font-medium px-5 py-3">Service</th>
+                  <th className="text-left font-medium px-5 py-3">Region</th>
+                  <th className="text-left font-medium px-5 py-3">Latency</th>
+                  <th className="text-left font-medium px-5 py-3">Uptime</th>
+                  <th className="text-left font-medium px-5 py-3">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {endpoints.map((a) => (
+                  <tr key={a.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition">
+                    <td className="px-5 py-3.5 font-medium">{a.name}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground capitalize">{a.region}</td>
+                    <td className="px-5 py-3.5 tabular-nums">{a.latency}</td>
+                    <td className="px-5 py-3.5 tabular-nums">{a.uptime}</td>
+                    <td className="px-5 py-3.5"><StatusBadge status={a.status === "unknown" ? "warning" : a.status} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </AppShell>

@@ -1,45 +1,101 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bot, Send, Sparkles, X } from "lucide-react";
+import { Bot, Send, Sparkles, X, Loader2, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 
 interface Msg {
   role: "user" | "ai";
   text: string;
 }
 
-const initial: Msg[] = [
-  {
-    role: "ai",
-    text: "Hi Alex — I'm Sentinel. I can explain incidents, summarize reports, or suggest fixes. What's on your mind?",
-  },
-];
-
 const suggestions = [
   "Summarize last 24h incidents",
-  "Why did /checkout latency spike?",
+  "Why did payments-api latency spike?",
   "Suggest fix for auth-service",
 ];
 
 export function AIChatbot() {
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Msg[]>(initial);
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  const send = (text: string) => {
-    if (!text.trim()) return;
-    setMessages((m) => [...m, { role: "user", text }]);
+  const fetchHistory = async () => {
+    try {
+      const data = await api.get<any>("/chatbot/history");
+      if (data && data.messages) {
+        setMessages(data.messages);
+      }
+    } catch (e) {
+      console.error("Error loading chat history", e);
+    }
+  };
+
+  const speak = (text: string) => {
+    if (!voiceEnabled || !window.speechSynthesis) return;
+    
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    
+    // Prefer an English voice for consistent output language
+    const preferredVoice = voices.find((v) => v.lang?.startsWith("en") && v.name.includes("Google"))
+      || voices.find((v) => v.lang?.startsWith("en") && /female|woman/i.test(v.name))
+      || voices.find((v) => v.lang?.startsWith("en"));
+    if (preferredVoice) utterance.voice = preferredVoice;
+
+    speechRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  useEffect(() => {
+    if (open) {
+      fetchHistory();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!window.speechSynthesis) return;
+    const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
+    loadVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", loadVoices);
+  }, []);
+
+  useEffect(() => {
+    // Auto-scroll to bottom of messages
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isTyping]);
+
+  const send = async (text: string) => {
+    if (!text.trim() || isTyping) return;
+    const userMsg = { role: "user" as const, text };
+    setMessages((m) => [...m, userMsg]);
     setInput("");
-    setTimeout(() => {
+    setIsTyping(true);
+
+    try {
+      const res = await api.post<any>("/chatbot/message", { message: text });
+      const aiMsg = { role: "ai" as const, text: res.text };
+      setMessages((m) => [...m, aiMsg]);
+      speak(res.text);
+    } catch (e) {
       setMessages((m) => [
         ...m,
-        {
-          role: "ai",
-          text:
-            "Root cause: connection pool saturation on payments-db. I've drafted a healing playbook: scale replicas +2 and recycle idle connections. Want me to apply it?",
-        },
+        { role: "ai", text: "Sorry, I am having trouble connecting to the AI models. Please try again." }
       ]);
-    }, 700);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   return (
@@ -70,9 +126,20 @@ export function AIChatbot() {
               <div className="flex-1">
                 <p className="text-sm font-semibold">Sentinel AI</p>
                 <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success" /> Online · gpt-healing-v2
+                  <span className="h-1.5 w-1.5 rounded-full bg-success" /> Online · Groq Llama3
                 </p>
               </div>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 text-muted-foreground"
+                onClick={() => {
+                  setVoiceEnabled(!voiceEnabled);
+                  if (voiceEnabled) window.speechSynthesis.cancel();
+                }}
+              >
+                {voiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+              </Button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -82,7 +149,7 @@ export function AIChatbot() {
                   className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm ${
+                    className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-line leading-relaxed ${
                       m.role === "user"
                         ? "gradient-primary text-white rounded-br-sm"
                         : "bg-secondary/70 rounded-bl-sm"
@@ -92,6 +159,15 @@ export function AIChatbot() {
                   </div>
                 </div>
               ))}
+              {isTyping && (
+                <div className="flex justify-start">
+                  <div className="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm bg-secondary/70 rounded-bl-sm flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <span>Sentinel is analyzing...</span>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
             </div>
 
             <div className="px-4 pb-2 flex gap-2 flex-wrap">
@@ -119,7 +195,7 @@ export function AIChatbot() {
                 placeholder="Ask anything about your APIs..."
                 className="flex-1 h-10 px-3 rounded-lg bg-secondary/60 border border-border text-sm outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
               />
-              <Button type="submit" size="icon" className="gradient-primary shrink-0">
+              <Button type="submit" size="icon" className="gradient-primary shrink-0" disabled={isTyping}>
                 <Send className="h-4 w-4" />
               </Button>
             </form>

@@ -26,6 +26,7 @@ import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { LatencyChart } from "@/components/dashboard/LatencyChart";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import robotImg from "@/assets/nexheal-robot.png";
+import { useAuth } from "@/hooks/useAuth";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -49,18 +50,22 @@ export const Route = createFileRoute("/")({
 /* ---------- Navbar ---------- */
 function Navbar() {
   const [scrolled, setScrolled] = useState(false);
+  const { isAuthenticated, loading } = useAuth();
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
   const links = [
     { label: "Features", href: "#features" },
     { label: "Solutions", href: "#how" },
-    { label: "Dashboard", to: "/dashboard" as const },
+    ...(isAuthenticated ? [{ label: "Dashboard", to: "/dashboard" as const }] : []),
     { label: "Pricing", href: "#pricing" },
     { label: "Docs", href: "#docs" },
   ];
+
   return (
     <header
       className={`fixed top-0 inset-x-0 z-50 transition-all ${
@@ -109,14 +114,28 @@ function Navbar() {
 
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Link to="/login" className="hidden sm:inline-flex">
-              <Button variant="ghost" size="sm">Login</Button>
-            </Link>
-            <Link to="/register">
-              <Button size="sm" className="gradient-primary gap-1.5">
-                Get Started <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </Link>
+            {!loading && (
+              <>
+                {isAuthenticated ? (
+                  <Link to="/dashboard">
+                    <Button size="sm" className="gradient-primary gap-1.5">
+                      Dashboard <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </Link>
+                ) : (
+                  <>
+                    <Link to="/login" className="hidden sm:inline-flex">
+                      <Button variant="ghost" size="sm">Login</Button>
+                    </Link>
+                    <Link to="/register">
+                      <Button size="sm" className="gradient-primary gap-1.5">
+                        Get Started <ArrowRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
+                  </>
+                )}
+              </>
+            )}
           </div>
         </nav>
       </div>

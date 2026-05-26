@@ -13,13 +13,25 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { AppSidebar } from "./AppSidebar";
 import { Link } from "@tanstack/react-router";
 import { Activity } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { useEffect, useState } from "react";
+import { api, connectNotifications } from "@/lib/api";
+import { toast } from "sonner";
 
-const notifications = [
-  { title: "Payments API latency spike", time: "2m ago", severity: "danger" },
-  { title: "Auto-healed: auth-service container", time: "9m ago", severity: "success" },
-  { title: "New deployment on /v1/orders", time: "21m ago", severity: "info" },
-  { title: "RAM usage > 85% on edge-eu-2", time: "1h ago", severity: "warning" },
-];
+interface NotificationItem {
+  id: string;
+  title: string;
+  message?: string;
+  type: string;
+  created_at: string;
+}
+
+const typeToSeverity: Record<string, string> = {
+  danger: "danger",
+  warning: "warning",
+  success: "success",
+  info: "info",
+};
 
 const sevColor: Record<string, string> = {
   danger: "bg-danger",
@@ -29,6 +41,77 @@ const sevColor: Record<string, string> = {
 };
 
 export function TopNavbar() {
+  const { user, logout } = useAuth();
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const fetchNotifications = async () => {
+    try {
+      const data = await api.get<NotificationItem[]>("/notifications");
+      // Handle the case where response might be wrapped in an object
+      const items = Array.isArray(data) ? data : (data as any).notifications || [];
+      setNotifications(items);
+      
+      const unreadData = await api.get<any>("/notifications/unread-count");
+      setUnreadCount(unreadData.count || 0);
+    } catch (e) {
+      console.error("Failed to load notifications", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+
+    // Subscribe to live notifications via WebSocket
+    const ws = connectNotifications((event) => {
+      // Refresh list
+      fetchNotifications();
+      // Show desktop/sonner toast
+      if (event.type === "incident") {
+        toast.error(`🚨 Incident: ${event.data.title}`);
+      } else if (event.type === "recovery") {
+        toast.success(`✅ Recovered: ${event.data.api_name}`);
+      } else if (event.type === "healing_complete") {
+        toast.success(`🔧 Healed: ${event.data.result}`);
+      }
+    });
+
+    return () => {
+      if (ws) ws.close();
+    };
+  }, []);
+
+  const markAllRead = async () => {
+    try {
+      await api.post("/notifications/mark-all-read");
+      setUnreadCount(0);
+      fetchNotifications();
+      toast.success("All notifications marked as read");
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const getInitials = () => {
+    if (!user) return "AS";
+    return `${user.first_name[0]}${user.last_name[0]}`.toUpperCase();
+  };
+
+  const formatTime = (timeStr: string) => {
+    try {
+      const d = new Date(timeStr);
+      const diffMs = Date.now() - d.getTime();
+      const diffMin = Math.round(diffMs / 60000);
+      if (diffMin < 1) return "Just now";
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffHrs = Math.round(diffMin / 60);
+      if (diffHrs < 24) return `${diffHrs}h ago`;
+      return d.toLocaleDateString();
+    } catch (e) {
+      return "some time ago";
+    }
+  };
+
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/70 backdrop-blur-xl px-4 lg:px-6">
       {/* Mobile sidebar */}
@@ -46,10 +129,6 @@ export function TopNavbar() {
               </div>
               <span className="font-semibold">Sentinel AI</span>
             </Link>
-          </div>
-          <div className="lg:hidden -mt-4">
-            {/* reuse sidebar visually */}
-            <div className="hidden">{/* placeholder */}</div>
           </div>
           <div className="lg:hidden">
             <AppSidebar />
@@ -72,24 +151,40 @@ export function TopNavbar() {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
-            <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-danger" />
+            {unreadCount > 0 && (
+              <span className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full bg-danger animate-pulse" />
+            )}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-80 glass-strong">
           <DropdownMenuLabel className="flex items-center justify-between">
             <span>Notifications</span>
-            <span className="text-[10px] text-muted-foreground">4 new</span>
+            {unreadCount > 0 && (
+              <button 
+                onClick={markAllRead}
+                className="text-[10px] text-primary hover:underline"
+              >
+                Mark all read
+              </button>
+            )}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {notifications.map((n, i) => (
-            <DropdownMenuItem key={i} className="py-2.5 gap-3">
-              <span className={`h-2 w-2 rounded-full ${sevColor[n.severity]} mt-1.5 shrink-0`} />
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-sm truncate">{n.title}</span>
-                <span className="text-xs text-muted-foreground">{n.time}</span>
-              </div>
-            </DropdownMenuItem>
-          ))}
+          {notifications.length === 0 ? (
+            <div className="py-6 text-center text-xs text-muted-foreground">
+              No new alerts or notifications.
+            </div>
+          ) : (
+            notifications.map((n) => (
+              <DropdownMenuItem key={n.id} className="py-2.5 gap-3">
+                <span className={`h-2 w-2 rounded-full ${sevColor[n.type] || "bg-primary"} mt-1.5 shrink-0`} />
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-sm truncate font-medium">{n.title}</span>
+                  {n.message && <span className="text-xs text-muted-foreground truncate">{n.message}</span>}
+                  <span className="text-[10px] text-muted-foreground/75 mt-0.5">{formatTime(n.created_at)}</span>
+                </div>
+              </DropdownMenuItem>
+            ))
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -98,12 +193,16 @@ export function TopNavbar() {
           <button className="flex items-center gap-2.5 pl-1 pr-3 py-1 rounded-full hover:bg-secondary/60 transition">
             <Avatar className="h-8 w-8">
               <AvatarFallback className="gradient-primary text-white text-xs font-semibold">
-                AS
+                {getInitials()}
               </AvatarFallback>
             </Avatar>
             <div className="hidden md:flex flex-col items-start leading-tight">
-              <span className="text-xs font-medium">Alex Stone</span>
-              <span className="text-[10px] text-muted-foreground">DevOps Lead</span>
+              <span className="text-xs font-medium">
+                {user ? `${user.first_name} ${user.last_name}` : "User Profile"}
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {user?.company || "Sentinel SRE"}
+              </span>
             </div>
           </button>
         </DropdownMenuTrigger>
@@ -114,7 +213,9 @@ export function TopNavbar() {
           <DropdownMenuItem>Billing</DropdownMenuItem>
           <DropdownMenuItem>Team</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>Sign out</DropdownMenuItem>
+          <DropdownMenuItem onClick={logout} className="text-danger hover:bg-danger/10 hover:text-danger cursor-pointer">
+            Sign out
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </header>

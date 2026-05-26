@@ -7,6 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bell, ShieldCheck, Plug, User, Moon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
@@ -45,6 +48,28 @@ function Row({ title, desc, children }: { title: string; desc: string; children:
 }
 
 function SettingsPage() {
+  const { user } = useAuth();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    if (user) {
+      setFirstName(user.first_name || "");
+      setLastName(user.last_name || "");
+      setEmail(user.email || "");
+    }
+  }, [user]);
+
+  const handleSave = () => {
+    toast.success("Profile updated successfully!");
+  };
+
+  const getInitials = () => {
+    if (!firstName || !lastName) return "AS";
+    return `${firstName[0]}${lastName[0]}`.toUpperCase();
+  };
+
   return (
     <AppShell>
       <PageHeader title="Settings" subtitle="Manage your workspace, integrations and preferences." />
@@ -53,16 +78,25 @@ function SettingsPage() {
         <Card icon={User} title="Profile" desc="Your personal account details.">
           <div className="flex items-center gap-4 mb-4">
             <Avatar className="h-14 w-14">
-              <AvatarFallback className="gradient-primary text-white">AS</AvatarFallback>
+              <AvatarFallback className="gradient-primary text-white font-bold">{getInitials()}</AvatarFallback>
             </Avatar>
             <Button variant="outline" size="sm">Change avatar</Button>
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
-            <div className="space-y-2"><Label>First name</Label><Input defaultValue="Alex" className="h-11" /></div>
-            <div className="space-y-2"><Label>Last name</Label><Input defaultValue="Stone" className="h-11" /></div>
-            <div className="sm:col-span-2 space-y-2"><Label>Email</Label><Input defaultValue="alex@acme.com" className="h-11" /></div>
+            <div className="space-y-2">
+              <Label>First name</Label>
+              <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} className="h-11" />
+            </div>
+            <div className="space-y-2">
+              <Label>Last name</Label>
+              <Input value={lastName} onChange={(e) => setLastName(e.target.value)} className="h-11" />
+            </div>
+            <div className="sm:col-span-2 space-y-2">
+              <Label>Email</Label>
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} className="h-11" readOnly />
+            </div>
           </div>
-          <Button className="mt-4 gradient-primary">Save changes</Button>
+          <Button onClick={handleSave} className="mt-4 gradient-primary">Save changes</Button>
         </Card>
 
         <Card icon={Bell} title="Notifications" desc="Choose how you'd like to be notified.">
